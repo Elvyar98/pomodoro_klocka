@@ -1,0 +1,23 @@
+# macOS systemfiler
+.DS_Store
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Miljöfiler
+.env
+
+# VS Code inställningar (om du använder det)
+.vscode/
+
+# Ljudfiler
+*.mp3
+*.wav
+*.aiff
+*.m4a
+
+# Programfiler
+*.app
+*.dmg
+
