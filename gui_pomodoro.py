@@ -3,6 +3,12 @@ from tkinter import messagebox
 import subprocess
 import time
 import threading
+import json
+from datetime import date
+import os
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from datetime import timedelta
 
 WORK_MINUTES = 25
 SHORT_BREAK = 5
@@ -41,6 +47,17 @@ class PomodoroApp:
         self.running = False
         self.pomodoro_count = 0
         self.is_break = False
+
+        self.stats_header = tk.Label(self.window, text="Statistik", font=("Helvetica", 12, "bold"))
+        self.stats_header.pack()
+
+        self.stats_label = tk.Label(self.window, text="Inga data ännu", font=("Helvetica", 10))
+        self.stats_label.pack(pady=5)
+
+        self.show_statistics()
+
+        self.weekly_button = tk.Button(self.window, text="Visa veckostatistik", command=self.show_weekly_stats)
+        self.weekly_button.pack(pady=5)
 
     def toggle_theme(self):
      if self.current_theme == "light":
@@ -122,6 +139,8 @@ class PomodoroApp:
 
             if not self.is_break:
                 self.pomodoro_count += 1
+                self.update_statistics()
+                self.show_statistics()
                 self.is_break = True
                 self.status_label.config(text="Status: Klar med arbete")
                 self.deactivate_dnd()
@@ -145,8 +164,94 @@ class PomodoroApp:
             self.label.config(text="Redo")
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
-    
+   
+    def update_statistics(self):
+        today = str(date.today())
+        stats_file = "stats.json"
 
+        if os.path.exists(stats_file):
+            with open(stats_file, "r") as f:
+                stats=json.load(f)
+        else:
+            stats={}
+        if today not in stats:
+            stats[today]={"pomodoros": 0, "minutes": 0}
+
+        stats[today]["pomodoros"] +=1
+        stats[today]["minutes"] +=25
+
+        with open(stats_file, "w") as f:
+            json.dump(stats, f, indent=2)      
+    
+    def show_statistics(self):
+        stats_file="stats.json"
+
+        if not os.path.exists(stats_file):
+            self.stats_label.config(text="Ingen statistik tillgänglig ännu.")
+            return
+        with open(stats_file, "r") as f:
+            stats=json.load(f)
+
+        today = str(date.today())
+        today_stats = stats.get(today, {})
+        today_poms = today_stats.get("pomodoros", 0)
+        today_minutes = today_stats.get("minutes", 0)
+
+        total_poms = sum(day.get("pomodoros", 0) for day in stats.values())
+        total_minutes = sum(day.get("minutes", 0) for day in stats.values())
+
+        text = (
+            f"Idag: {today_poms} pomodoros ({today_minutes} min)\n"
+            f"Totalt: {total_poms} pomodoros ({total_minutes} min)"
+         )
+        self.stats_label.config(text=text)    
+    
+    def show_stats_over_time(self, days_back=28, show_minutes=False):
+      stats_file = "stats.json"
+      if not os.path.exists(stats_file):
+        return
+
+      with open(stats_file, "r") as f:
+        stats = json.load(f)
+
+      today = date.today()
+      days = [(today - timedelta(days=i)).isoformat() for i in range(days_back - 1, -1, -1)]
+
+      values = [stats.get(day, {}).get("minutes" if show_minutes else "pomodoros", 0) for day in days]
+
+      def average_for_group(group_days):
+        group_values = [stats.get(day, {}).get("pomodoros", 0) for day in group_days]
+        return sum(group_values) / len(group_values) if group_values else 0
+
+      avg_week = average_for_group(days[-7:]) if len(days) >= 7 else 0
+      avg_month = average_for_group(days[-30:]) if len(days) >= 30 else 0
+      avg_year = average_for_group(days[-365:]) if len(days) >= 365 else 0
+
+      chart_window = tk.Toplevel(self.window)
+      chart_window.title("Statistik över tid")
+
+      fig, ax = plt.subplots(figsize=(10, 5))
+      x = range(len(days))
+      ax.bar(x, values, color="#FF5733", label="Pomodoros per dag")
+
+      ax.axhline(y=avg_week, color="blue", linestyle="--", label=f"Snitt (7d): {avg_week:.1f}")
+      ax.axhline(y=avg_month, color="green", linestyle="--", label=f"Snitt (30d): {avg_month:.1f}")
+      ax.axhline(y=avg_year, color="gray", linestyle="--", label=f"Snitt (365d): {avg_year:.1f}")
+
+      ax.set_title("Pomodoros per dag")
+      ax.set_ylabel("Antal")
+      ax.set_xticks(x[::max(1, len(x)//10)])
+      ax.set_xticklabels([days[i][5:] for i in x][::max(1, len(x)//10)], rotation=45)
+      ax.legend()
+      fig.tight_layout()
+
+      canvas = FigureCanvasTkAgg(fig, master=chart_window)
+      canvas.draw()
+      canvas.get_tk_widget().pack()
+
+
+ 
 root = tk.Tk() 
 app = PomodoroApp(root)
 root.mainloop()
+
